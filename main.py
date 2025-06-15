@@ -12,6 +12,11 @@ load_dotenv()
 
 app = FastAPI()
 
+# Create static directory if it doesn't exist
+static_dir = "static"
+if not os.path.exists(static_dir):
+    os.makedirs(static_dir)
+
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
