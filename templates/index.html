@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location Share</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .loading {
+            display: none;
+        }
+        .loading.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
+        <h1 class="text-2xl font-bold text-center mb-6">Share Your Location</h1>
+        
+        <div id="locationStatus" class="mb-4 text-center">
+            <p class="text-gray-600">Click the button below to share your location</p>
+        </div>
+
+        <div class="loading mb-4 text-center">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+            <p class="mt-2 text-gray-600">Getting location...</p>
+        </div>
+
+        <button id="shareButton" 
+                class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition duration-200">
+            Share Location
+        </button>
+
+        <div id="result" class="mt-4 text-center hidden"></div>
+        
+        <div class="mt-4 text-xs text-gray-500 text-center">
+            <p>We'll try to get your precise location first. If denied, we'll use your approximate location based on your IP address.</p>
+        </div>
+    </div>
+
+    <script>
+        const shareButton = document.getElementById('shareButton');
+        const locationStatus = document.getElementById('locationStatus');
+        const loading = document.querySelector('.loading');
+        const result = document.getElementById('result');
+
+        // Function to get IP-based location
+        async function getIPLocation() {
+            try {
+                const response = await fetch('https://ipapi.co/json/');
+                const data = await response.json();
+                return {
+                    latitude: data.latitude,
+                    longitude: data.longitude,
+                    accuracy: 'approximate (IP-based)',
+                    city: data.city,
+                    country: data.country_name
+                };
+            } catch (error) {
+                throw new Error('Unable to get location from IP');
+            }
+        }
+
+        // Function to get GPS location
+        function getGPSLocation() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject(new Error('Geolocation is not supported by this browser'));
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        resolve({
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: 'precise (GPS)',
+                            city: null,
+                            country: null
+                        });
+                    },
+                    (error) => {
+                        reject(error);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 60000
+                    }
+                );
+            });
+        }
+
+        shareButton.addEventListener('click', async () => {
+            try {
+                // Show loading state
+                loading.classList.add('active');
+                shareButton.disabled = true;
+                locationStatus.innerHTML = '<p class="text-gray-600">Getting your location...</p>';
+
+                let locationData;
+                let locationMethod;
+
+                try {
+                    // Try GPS first
+                    locationStatus.innerHTML = '<p class="text-gray-600">Trying to get precise location...</p>';
+                    locationData = await getGPSLocation();
+                    locationMethod = 'GPS';
+                } catch (gpsError) {
+                    // Fall back to IP-based location
+                    locationStatus.innerHTML = '<p class="text-gray-600">GPS denied, getting approximate location...</p>';
+                    try {
+                        locationData = await getIPLocation();
+                        locationMethod = 'IP';
+                    } catch (ipError) {
+                        throw new Error('Unable to determine location');
+                    }
+                }
+
+                // Send location to backend
+                const response = await fetch('/share-location', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        latitude: locationData.latitude,
+                        longitude: locationData.longitude,
+                        accuracy: locationData.accuracy,
+                        city: locationData.city,
+                        country: locationData.country,
+                        method: locationMethod
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    result.innerHTML = `<p class="text-green-500">Location shared successfully!<br><small class="text-gray-500">(${locationData.accuracy})</small></p>`;
+                    result.classList.remove('hidden');
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (error) {
+                result.innerHTML = `<p class="text-red-500">Error: ${error.message}</p>`;
+                result.classList.remove('hidden');
+            } finally {
+                loading.classList.remove('active');
+                shareButton.disabled = false;
+                locationStatus.innerHTML = '<p class="text-gray-600">Click the button below to share your location</p>';
+            }
+        });
+    </script>
+</body>
+</html> 
