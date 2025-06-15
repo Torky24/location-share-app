@@ -6,6 +6,7 @@ from twilio.rest import Client
 import os
 from dotenv import load_dotenv
 from pydantic import BaseModel
+from typing import Optional
 
 # Load environment variables
 load_dotenv()
@@ -32,18 +33,25 @@ WHATSAPP_NUMBER = os.getenv("WHATSAPP_NUMBER")
 class LocationData(BaseModel):
     latitude: float
     longitude: float
-    accuracy: str = None
-    city: str = None
-    country: str = None
-    method: str = None
+    accuracy: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    method: Optional[str] = None
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "message": "Location sharing app is running"}
+
 @app.post("/share-location")
 async def share_location(location: LocationData):
     try:
+        # Debug: Print received data
+        print(f"Received location data: {location}")
+        
         # Initialize Twilio client
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         
@@ -67,6 +75,7 @@ async def share_location(location: LocationData):
         
         return {"status": "success", "message": "Location shared successfully"}
     except Exception as e:
+        print(f"Error in share_location: {str(e)}")
         return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
